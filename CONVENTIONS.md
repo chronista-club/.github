@@ -31,16 +31,38 @@ prefix 候補の比較:
 | 内部 crate (`publish = false`) | (任意) | `unison-mcp-probe` | publish なし |
 | product (CLI tool) | (product 固有) | `creo`, `vp`, `fleetflow` | (個別) |
 
-### full rename policy
+### prefix を付ける範囲 — registry-listed か code path か
 
-公開 crate は **package 名だけでなく lib 名も** `club_` prefix に full rename する。
+`club-` prefix の責務は **crates.io の global flat namespace での衝突回避**。 よって prefix は 「その identifier が browsable な registry / index に listed されるか」 で判別する:
 
-| | crates.io package | lib name (`use`) |
-|--|--|--|
-| ✅ 現行 (full rename) | `club-unison` | `club_unison` |
-| ✗ 旧 (lib 名据置) | `club-unison` | `unison` |
+| 種別 | prefix | 該当 identifier |
+|------|--------|----------------|
+| registry / index に listed | **あり** | `[package].name` (crates.io)、 GitHub repo、 local checkout dir (`~/repos/...`、 Finder) |
+| code path 内に埋もれる | **なし** | `[lib].name` (import path)、 workspace subdir (`crates/...`) |
+| human-facing display label | (例外・自由) | creo-memories atlas |
 
-経緯: 当初 (unison v0.5.0) は 「package 名のみ rename、 lib 名は据置」 だったが、 v0.6.0 で 「lib 名も rename」 へ方針変更。 理由は `club-kdl` 側 (lib `club_kdl`) との整合性。 ecosystem 全体で **package 名と lib 名を一致させる** ことを優先した。
+### lib 名は bare name
+
+lib 名 (`[lib].name`、 consumer の `use` で書く識別子) は registry namespace の外 ── code path に属する ── ため **prefix を付けない**。
+
+| crates.io package | lib name (`use`) |
+|--|--|
+| `club-unison` | `unison` |
+| `club-nostos` | `nostos` |
+
+consumer は Cargo の package rename で吸収する:
+
+```toml
+[dependencies]
+club-unison = "0.10"     # crates.io package 名 (prefix あり)
+```
+```rust
+use unison::Channel;     # lib 名は bare
+```
+
+経緯: unison v0.5.0 で 「package 名のみ rename」、 v0.6.0 で 「lib 名も `club_` 化 (full rename policy)」 を一旦採用。 2026-05-16 に見直し、 lib 名は bare へ戻した ── prefix は import を毎行冗長にするコストに見合わず、 衝突問題も registry 外には存在しないため。
+
+> **例外 — `club-kdl`**: bare lib 名 `kdl` は upstream の `kdl` crate と衝突する (両方を依存に持つ project が存在しうる)。 よって `club-kdl` のみ lib 名を `club_kdl` とする。 これは衝突回避という原則に基づく carve-out。
 
 ### namespace 別命名 map
 
@@ -52,17 +74,10 @@ prefix 候補の比較:
 | GitHub repo | あり | `club-nostos` |
 | local checkout (`~/repos/...`) | あり | `club-nostos` |
 | `[package].name` (Cargo.toml) | あり | `club-nostos` |
-| `[lib].name` (import path) | あり | `club_nostos` |
+| `[lib].name` (import path) | **なし** | `nostos` |
 | workspace subdir (`crates/...`) | **なし** | `nostos` |
 | creo-memories atlas | **(例外)** | `Nostos Club` |
 | project 通称 (informal) | なし | `nostos` |
-
-現行ルールは **「原則すべての layer で `club-` prefix、 例外は 2 つ」**:
-
-1. **workspace subdir** (`crates/nostos-core/` 等) ── repo 内部の code path に埋もれるため prefix なし
-2. **creo-memories atlas** ── machine identifier ではなく human-facing な **display label**。 Title Case + space を許容する (例: `Nostos Club`)
-
-> 補足: prefix の有無を 「その identifier が browsable な一覧 UI (crates.io / GitHub org page / Finder 等) に出るか」 で判別する設計案もあったが、 full rename policy 採用で 「一貫性のため原則全 prefix」 に整理された。 上記 2 例外はその残余。
 
 ### User-facing 使用例 (確定形)
 
@@ -72,7 +87,7 @@ club-nostos = "0.1"
 ```
 
 ```rust
-use club_nostos::Bracket;
+use nostos::Bracket;
 ```
 
 ```bash
@@ -83,4 +98,4 @@ cd ~/repos/club-nostos
 
 ### 新規 crate を足すとき
 
-`[package].name = "club-<name>"` / `[lib].name = "club_<name>"` で統一する。
+`[package].name = "club-<name>"` / `[lib].name = "<name>"` (bare) で統一する。 bare lib 名が他 crate と衝突する場合のみ、 `club-kdl` 同様に prefix 付き lib 名を例外とする。
